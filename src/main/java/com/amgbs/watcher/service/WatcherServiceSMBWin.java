@@ -1,62 +1,48 @@
 package com.amgbs.watcher.service;
 
+import com.amgbs.watcher.utility.ActionType;
+import jcifs.CIFSException;
 import jcifs.FileNotifyInformation;
 import jcifs.SmbWatchHandle;
 import jcifs.smb.SmbFile;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.util.List;
-import java.util.concurrent.*;
+import java.util.*;
 
 @Slf4j
 @Service
 @Profile("{remote}")
 public class WatcherServiceSMBWin implements WatcherService {
-    ExecutorService executorService = Executors.newFixedThreadPool(3);
 
-    private SmbFile smbFile;
-
-    @Autowired
-    public WatcherServiceSMBWin(SmbFile smbFile) {
-        this.smbFile = smbFile;
-    }
+    @Value("${remote}")
+    private String remoteFolderPath;
 
     @Override
-    public void monitorFolder() throws IOException, InterruptedException {
+    public void monitorFolder() throws IOException {
+
         while (true) {
-            CopyOnWriteArrayList<FileNotifyInformation> list = new CopyOnWriteArrayList<>();
-            try {
-                list.addAll(getActions(smbFile.watch(FileNotifyInformation.FILE_ACTION_ADDED, true)));
-                list.addAll(getActions(smbFile.watch(FileNotifyInformation.FILE_ACTION_REMOVED, true)));
-                list.addAll(getActions(smbFile.watch(FileNotifyInformation.FILE_ACTION_MODIFIED, true)));
-            } catch (ExecutionException e) {
-                e.printStackTrace();
-            }
-            for (FileNotifyInformation info : list) {
-                log.warn(info.getFileName() + " was " + (info.getAction() == 1 ? "added" : info.getAction() == 2 ? "deleted" : "changed"));
-            }
-            list.clear();
-            Thread.sleep(500);
+            SmbFile smbFile = new SmbFile("smb://" + remoteFolderPath);
+            oneTimeMonitoring(smbFile);
         }
     }
 
-    private List<FileNotifyInformation> getActions(SmbWatchHandle handle) throws ExecutionException, InterruptedException {
-        Future<List<FileNotifyInformation>> list = executorService.submit(handle);
-        while (true) {
-            if (!list.isDone()) {
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            } else {
-                break;
-            }
-        }
-        return list.get();
+    //divided in parts for testing purpose
+    public List<String> oneTimeMonitoring(SmbFile smbFile) throws CIFSException {
+        SmbWatchHandle handler = smbFile.watch(2 | 3 | 4 | 5, true);;
+        List<String> logs = new LinkedList<>();
+        List<FileNotifyInformation> actions = handler.watch();
+        actions.forEach(x -> {
+
+                log.warn("File {} was {}", x.getFileName(), ActionType.values()[x.getAction() - 1].getActionName());
+                logs.add(String.format("File %s was %s", x.getFileName(), ActionType.values()[x.getAction() - 1].getActionName()));
+                });
+
+        handler.close();
+        smbFile.close();
+        return logs;
     }
 }
