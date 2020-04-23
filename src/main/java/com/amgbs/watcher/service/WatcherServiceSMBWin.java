@@ -37,7 +37,7 @@ public class WatcherServiceSMBWin implements WatcherService {
                 e.printStackTrace();
             }
             for (FileNotifyInformation info : list) {
-                log.info(info.getFileName() + " was " + (info.getAction() == 1 ? "added" : info.getAction() == 2 ? "deleted" : "changed"));
+                log.warn(info.getFileName() + " was " + (info.getAction() == 1 ? "added" : info.getAction() == 2 ? "deleted" : "changed"));
             }
             list.clear();
             Thread.sleep(500);
